@@ -2,11 +2,12 @@ import asyncio
 import json
 
 from starlette.responses import JSONResponse
+
 from src.app import app
 from fastapi import WebSocket, Depends, Body
 from fastapi.websockets import WebSocketDisconnect
 
-from src.data_handlers import listen_to_chat
+from src.websocket_utils import handle_incoming_chat_messages, maintain_session_life
 from src.redis_client import get_redis_connection
 from src.utils import generate_session_id, generate_chat_id
 from redis.asyncio import Redis
@@ -28,26 +29,17 @@ async def session(
     while True:
         session_id = generate_session_id()
 
-        # If session with generated id already exists
-        if await storage.get(f'session:{session_id}'):
-            continue
-        else:
+        if not await storage.get(f'session:{session_id}'):
             await storage.set(f'session:{session_id}', value=1)
             break
 
     try:
-        # Return generated session id to user
         await websocket.send({'session_id': session_id})
-
-        # Maintain connection
-        while True:
-            data = await websocket.receive()
-
-            if data:
-                await websocket.send({'message': 'This route does not support any commands.'})
-
+        await maintain_session_life(websocket)
     except WebSocketDisconnect:
+        # Delete session and notify about its end of lifespan
         await storage.delete(f'session:{session_id}')
+        await storage.publish(f'session:{session_id}:life', 'end')
 
 
 @app.post('/chat')
@@ -91,42 +83,52 @@ async def chat_connection(
             await websocket.send_json({'type': 'error', 'message': 'Missing chat_id and chat_id'})
             continue
 
+    # Check if session is valid
+    if not await storage.get(f'session:{session_id}'):
+        await websocket.close(reason='Unknown session id.')
+
     # Check if user is in any other chat
-    if await storage.get(f'session:{session_id}:chat_reference'):
+    chat_reference = await storage.get(f'session:{session_id}:chat_reference')
+    if chat_reference and chat_reference != chat_id:
         await websocket.close(reason='Not possible to be in 2 or more chats simultaneously')
 
     pubsub = storage.pubsub()
 
-    await pubsub.subscribe(f'chat:{chat_id}:stream')
+    await pubsub.subscribe(f'chat:{chat_id}:stream', f'session:{session_id}:life')
 
     # Notify members about new user
     await storage.publish(
         f'chat:{chat_id}:stream',
-        json.dumps({'type': 'notification', 'content': f'User {session_id} joined.'})
+        json.dumps({'type': 'join', 'session_id': session_id})
     )
 
     # Create task to send messages to current user
-    asyncio.create_task(listen_to_chat(websocket, pubsub))
+    asyncio.create_task(handle_incoming_chat_messages(session_id, websocket, pubsub))
 
-    # Listen to current users for messages
+    # Listen to current user for messages
     try:
         while True:
             data = await websocket.receive_json()
 
-            await storage.publish(
-                f'chat:{chat_id}:stream',
-                json.dumps({'type': 'message', 'author': session_id, 'content': data})
-            )
+            # Check if session still exist
+            if await storage.get(f'session:{session_id}'):
+                await storage.publish(
+                    f'chat:{chat_id}:stream',
+                    json.dumps({'type': 'message', 'session_id': session_id, 'content': data})
+                )
+            else:
+                # If session connection was closed
+                raise WebSocketDisconnect
 
     except WebSocketDisconnect:
+        # Delete reference of session to the chat and notify chat members that current session quited
         await storage.delete(f'session:{session_id}:chat_reference')
         await storage.publish(
             f'chat:{chat_id}:stream',
-            json.dumps({'type': 'notification', 'content': f'User {session_id} quit.'})
+            json.dumps({'type': 'quit', 'session_id': session_id})
         )
 
 
 
 # TODO add current users info
-# TODO when last user disconnects the listen_to_chat task doesn't have a way to end
 # TODO add simple frontend

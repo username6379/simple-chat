@@ -1,5 +1,4 @@
 import random
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
 
@@ -17,4 +16,3 @@ def generate_chat_id():
 
 def get_current_time():
     return datetime.now(timezone.utc)
-
