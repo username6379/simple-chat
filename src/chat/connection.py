@@ -41,11 +41,12 @@ class ChatConnection:
         ))
 
     async def connect(self) -> tuple[asyncio.Task, asyncio.Task]:
-        await self.storage.create_chat_reference()
-        await self.stream.notify_join(self.session_id)
+        """ Create chat reference and notify users that new user joined """
+        await self.session_storage.create_chat_reference(chat_id=self.chat_id, session_id=self.session_id)
+        await self.stream.notify_join()
         return (await self._initialize_listening()), (await self._initialize_publishing())
 
     async def disconnect(self):
-        """ Execute something when user disconnects from chat """
-        await self.storage.remove_chat_reference(self.chat_id, self.session_id)
-        await self.stream.notify_quit(self.session_id)
+        """ Delete chat reference and notify other users about quit """
+        await self.session_storage.remove_chat_reference(self.session_id)
+        await self.stream.notify_quit()

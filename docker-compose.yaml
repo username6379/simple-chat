@@ -1,20 +1,14 @@
 name: simple-chat
 
 services:
-#  frontend_server:
-#    volumes:
-#      - ./frontend:/frontend
-#    ports:
-#      - "9000:8080"
-
-  redis_storage:
+  redis-instance:
     image: redis:8.4-alpine
 
-  backend_server:
+  app-server:
     build:
-      context: ./backend
-      dockerfile: ./Dockerfile
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - .:/app
