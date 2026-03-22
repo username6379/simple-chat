@@ -1,9 +1,9 @@
 ## Table of content
-- About application
-- Installation
-- Startup
-- Routes
-- Future improvements
+- [About application](#about-application)
+- [Installation](#installation)
+- [Start the application](#start-up)
+- [Routes](#routes)
+- [Future improvements](#future-improvements)
 
 
 ### About application
