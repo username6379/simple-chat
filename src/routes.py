@@ -41,7 +41,7 @@ async def session(
         # Delete session and notify message handler (if session is in any chat)
         await session_storage.delete_id(session_id)
 
-        chat_reference = await session_storage.get_reference(session_id)
+        chat_reference = int(await session_storage.get_reference(session_id))
         if chat_reference:
             chat_stream = await chat_storage.get_stream(chat_id=chat_reference, session_id=session_id)
             await chat_stream.publish_session_death_event()
