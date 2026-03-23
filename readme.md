@@ -33,9 +33,9 @@ docker compose up -d
 ***/session***
 > By connecting to this route you will receive the session id. Response: **{"session_id": session_id}**
 
-> Disruption to the connection will mean session invalidation.
-
 > Any further commands to this websocket will return same response which is: **{'type': 'error', 'message': 'This route does not support any commands.'}**
+
+> Disruption to the connection will mean session invalidation.
 
 ***/chat***
 > By connecting to this route you will join a chat. However, before joining chat you will need to send the chat id which you want to join and your session id.
