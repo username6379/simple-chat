@@ -16,7 +16,7 @@ This can be done by inheriting and implementing abstract classes "ChatStream" an
 The application is designed to be lightweight, with a strict and predictable approach to how users connect and interact
 within chat rooms.
 
-With great sadness, at the moment the application doesn't have frontend and any testing suite.
+At the moment the application doesn't have frontend and testing suite because i did it in few hours and didn't have enough time.
 
 
 ### Installation
