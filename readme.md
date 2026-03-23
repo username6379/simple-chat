@@ -11,7 +11,7 @@ simple-chat is a straightforward, real-time chat application built as a monolith
 It leverages the speed of FastAPI, the pub/sub capabilities of Redis, and WebSockets for seamless, instant communication.
 
 However, I did my best to design it in a such way that would be easy to swap Redis pub/sub with any other message broker.
-This can be done because of abstract class "ChatStream" and "ChatStorage, implement using your beloved message broker.
+This can be done by inheriting and implementing abstract classes "ChatStream" and "ChatStorage.
 
 The application is designed to be lightweight, with a strict and predictable approach to how users connect and interact
 within chat rooms.
