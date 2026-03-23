@@ -24,7 +24,7 @@ class SessionStorage:
 
 from redis.asyncio import Redis
 
-# TODO maybe instead of holding reference to chat, just hold if session is in any chat
+
 class RedisSessionStorage:
     def __init__(self, client: Redis):
         self.__client = client

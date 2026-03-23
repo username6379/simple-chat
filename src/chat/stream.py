@@ -43,16 +43,20 @@ from redis.asyncio import Redis
 class RedisChatStream(ChatStream):
     def __init__(self, client: Redis, *args, **kwargs):
         self.__client = client
-        self.__pubsub = client.pubsub()
+        self._pubsub = client.pubsub()
         super().__init__(*args, **kwargs)
 
     async def listen(self):
-        await self.__pubsub.subscribe(f'chat:{self.chat_id}:stream', f'session:{self.session_id}:life')
+        await self._pubsub.subscribe(f'chat:{self.chat_id}:stream', f'session:{self.session_id}:life')
 
-        async for data in self.__pubsub.listen():
-            if data['type'] == 'subscribe':
-                continue
-            yield json.loads(data['data'].decode('utf-8'))
+        try:
+            async for data in self._pubsub.listen():
+                if data['type'] == 'subscribe':
+                    continue
+                yield json.loads(data['data'])
+        except Exception as e:
+            await self._pubsub.aclose()
+            raise e
 
     async def notify_join(self):
         message = json.dumps({
