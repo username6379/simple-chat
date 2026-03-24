@@ -1,2 +1,0 @@
-class ChatLeave(Exception):
-    pass
