@@ -31,9 +31,10 @@ class ChatStream(ABC):
         """ Publish message in stream """
         pass
 
+
+class ChatStreamProducer(ABC):
     @abstractmethod
-    async def publish_session_death_event(self):
-        """ Maybe move this method somewhere else because it is not quite part of chat stream """
+    def produce(self, chat_id: int, session_id: int) -> ChatStream:
         pass
 
 
@@ -43,19 +44,20 @@ from redis.asyncio import Redis
 class RedisChatStream(ChatStream):
     def __init__(self, client: Redis, *args, **kwargs):
         self.__client = client
-        self._pubsub = client.pubsub()
         super().__init__(*args, **kwargs)
 
     async def listen(self):
-        await self._pubsub.subscribe(f'chat:{self.chat_id}:stream', f'session:{self.session_id}:life')
+        pubsub = self.__client.pubsub()
+        await pubsub.subscribe(f'chat:{self.chat_id}:stream')
 
+        # TODO remove duplicated code
         try:
-            async for data in self._pubsub.listen():
+            async for data in pubsub.listen():
                 if data['type'] == 'subscribe':
                     continue
                 yield json.loads(data['data'])
-        except Exception as e:
-            await self._pubsub.aclose()
+        except BaseException as e:
+            await pubsub.aclose()
             raise e
 
     async def notify_join(self):
@@ -86,9 +88,10 @@ class RedisChatStream(ChatStream):
         })
         await self.__client.publish(f'chat:{self.chat_id}:stream', message)
 
-    async def publish_session_death_event(self):
-        message = json.dumps({
-            'type': 'session_death',
-            'session_id': self.session_id
-        })
-        await self.__client.publish(f'chat:{self.chat_id}:stream', message)
+
+class RedisChatStreamProducer(ChatStreamProducer):
+    def __init__(self, client: Redis):
+        self.client = client
+
+    def produce(self, chat_id: str, session_id: int) -> ChatStream:
+        return RedisChatStream(client=self.client, chat_id=chat_id, session_id=session_id)

@@ -1,28 +1,41 @@
-class SessionStorage:
+from abc import abstractmethod, ABC
+from redis.asyncio import Redis
+from src.session.stream import SessionLifeStream
+
+
+class SessionStorage(ABC):
+    @abstractmethod
     async def is_session_alive(self, session_id: int) -> bool:
         pass
 
+    @abstractmethod
     async def is_id_available(self, session_id: int) -> bool:
         pass
 
+    @abstractmethod
     async def save_id(self, session_id: int):
         pass
 
+    @abstractmethod
     async def delete_id(self, session_id: int):
         pass
 
+    @abstractmethod
     async def get_reference(self, session_id: int) -> int | None:
         """ Returns chat reference (if any) """
         pass
 
+    @abstractmethod
     async def create_chat_reference(self, chat_id: int, session_id: int):
         pass
 
+    @abstractmethod
     async def remove_chat_reference(self, session_id: int):
         pass
 
-
-from redis.asyncio import Redis
+    @abstractmethod
+    async def get_session_life_stream(self) -> SessionLifeStream:
+        pass
 
 
 class RedisSessionStorage:
