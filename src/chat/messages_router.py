@@ -1,50 +1,59 @@
+import asyncio
 import json
-from asyncio import CancelledError
+import re
+from abc import abstractmethod, ABC
 from redis.asyncio import Redis
 from src.base.redis import client
 
 
-class MessagesRouterState:
-    IDLE = 0
-    ROUTING = 1
-
-
-# TODO abstract implementation
-class MessagesRouter:
-    def __init__(self, client: Redis):
-        self.__client = client
-        self.__pubsub = client.pubsub()
+class MessagesRouter(ABC):
+    def __init__(self):
         self.subscribers = {}
-        self.__state = MessagesRouterState.IDLE
+        self.__routing_task = asyncio.create_task(self.start_routing())
 
     async def subscribe(self, chat):
         self.subscribers[chat.id] = chat
-        await self.__pubsub.subscribe(f'chat:{chat.id}:messages')
 
     async def unsubscribe(self, chat):
         del self.subscribers[chat.id]
+
+    @abstractmethod
+    async def start_routing(self):
+        pass
+
+    @abstractmethod
+    async def publish(self, chat_id, payload):
+        pass
+
+
+class RedisMessagesRouter(MessagesRouter):
+    def __init__(self, client: Redis):
+        self.__client = client
+        self.__pubsub = client.pubsub()
+        super().__init__()
+
+    async def subscribe(self, chat):
+        await super().subscribe(chat)
+        await self.__pubsub.subscribe(f'chat:{chat.id}:messages')
+
+    async def unsubscribe(self, chat):
+        await super().unsubscribe(chat)
         await self.__pubsub.unsubscribe(f'chat:{chat.id}:messages')
 
     async def start_routing(self):
-        if self.__state == MessagesRouterState.ROUTING:
-            raise ValueError('Router is already in routing state.') # Change to right type of error
+        async for data in self.__pubsub.listen():
+            if data['type'] == 'message':
+                chat_id = re.search(r'chat:(\d+):messages', data['channel']).group(1)
+                asyncio.create_task(
+                    self.subscribers[chat_id].broadcast_locally(data=json.loads(data['data']))
+                )
 
-        try:
-            async for data in self.__pubsub.listen():
-                if data['type'] == 'subscribe':
-                    continue
-                ...
-        except CancelledError:
-            self.__state = MessagesRouterState.IDLE
-
-    async def publish(self, chat_id, payload):
-        await self.__client.publish(f'chat:{chat_id}:messages', json.dumps({'chat_id': chat_id, 'payload': payload}))
+    async def publish(self, chat_id, payload: dict):
+        await self.__client.publish(f'chat:{chat_id}:messages', json.dumps(payload))
 
 
-message_routers = [
-    MessagesRouter(client)
-]
+message_router = RedisMessagesRouter(client)
 
 
-def get_message_router(chat_id):
-    return message_routers[0]
+def get_messages_router(chat_id):
+    return message_router

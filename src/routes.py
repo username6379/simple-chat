@@ -4,10 +4,10 @@ from src.app import app
 from fastapi import WebSocket, Depends
 from fastapi.websockets import WebSocketDisconnect
 from src.chat.chat import get_chat, wait_chat_websocket_disconnect
-from src.routes_dependencies import get_session_storage
-from src.session.death_dispatcher import get_session_death_dispatcher
+from src.chat.storage import ChatStorage, get_chat_storage
+from src.session.storage import get_session_storage
+from src.session.dispatcher import get_sessions_deaths_dispatcher
 from src.session.storage import SessionStorage
-from src.base.websocket_utils import maintain_connection
 from src.session.utils import wait_session_death
 from src.utils import generate_session_id
 
@@ -33,25 +33,26 @@ async def session(
             break
 
     try:
-        # Maintain life of session
         await websocket.send_json({'session_id': session_id})
-        await maintain_connection(websocket)
+        # Maintain connection
+        while True:
+            await websocket.receive_json()
+            await websocket.send({'type': 'error', 'message': 'This route does not support any commands.'})
     except WebSocketDisconnect:
-        # If session connection closed
-        # Delete session and notify chat messages handler (if session is in any chat)
         await session_storage.delete_id(session_id)
 
         chat_reference = await session_storage.get_reference(session_id)
 
         if chat_reference:
-            sessions_deaths_dispatcher = await get_session_death_dispatcher(session_id)
+            sessions_deaths_dispatcher = await get_sessions_deaths_dispatcher(session_id)
             await sessions_deaths_dispatcher.publish(session_id)
 
-# TODO what if session dispatcher will control listening to 1 or more pubsubs and everything will be done through 1 instance of session dispatcher
+
 @app.websocket('/chat')
 async def connect_to_chat(
         websocket: WebSocket,
         session_storage: SessionStorage = Depends(get_session_storage),
+        chat_storage: ChatStorage = Depends(get_chat_storage)
 ):
     await websocket.accept()
 
@@ -67,7 +68,7 @@ async def connect_to_chat(
             await websocket.send_json({'type': 'error', 'message': 'Missing session_id'})
             continue
         elif not chat_id:
-            await websocket.send_json({'type': 'error', 'message': 'Missing chat_id and chat_id'})
+            await websocket.send_json({'type': 'error', 'message': 'Missing chat_id'})
             continue
         else:
             break
@@ -80,7 +81,12 @@ async def connect_to_chat(
     if await session_storage.get_reference(session_id):
         await websocket.close(reason='Not possible to be in 2 or more chats simultaneously.')
 
-    chat = await get_chat(chat_id)
+    # chat = await get_chat(chat_id)
+    chat = await chat_storage.get(chat_id)
+
+    if not chat:
+        chat = await chat_storage.create(chat_id)
+
     await chat.add_session(session_id, websocket)
 
     tasks = [asyncio.create_task(wait_chat_websocket_disconnect(session_id, chat)), asyncio.create_task(wait_session_death(session_id))]
@@ -91,6 +97,9 @@ async def connect_to_chat(
         task.cancel()
         await task
 
+    if len(chat.sessions) == 0:
+        await chat_storage.delete(chat)
+
+
 # TODO make incoming data more safe to consume
-# TODO currently /chat creates 2 pubsubs (listening to chat messages and session life) so 2 connections are in use by 1 user. maybe find a solution to this problem
 # TODO add current users info for chat members

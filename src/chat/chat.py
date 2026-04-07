@@ -1,6 +1,6 @@
 import asyncio
 from fastapi.websockets import WebSocketDisconnect, WebSocket
-from src.chat.messages_router import get_message_router, MessagesRouter
+from src.chat.messages_router import get_messages_router, MessagesRouter
 
 
 class Chat:
@@ -9,21 +9,22 @@ class Chat:
         self.messages_router = messages_router
         self.sessions = {}  # {session_id: (websocket, tasks)}
 
-    async def broadcast_locally(self, payload):
+    async def broadcast_locally(self, payload: dict):
         """ Send payload to the sessions that are in current chat instance. Must be called by the messages router """
         for session_values in self.sessions.values():
             await session_values[0].send_json(payload)
 
-    async def broadcast_globally(self, payload):
+    async def broadcast_globally(self, payload: dict):
         """ Send payload to the broker, messages routers will pick up message
         and will call the chat broadcast_locally method to send message to the users """
         await self.messages_router.publish(self.id, payload)
 
-    async def add_session(self, session_id, websocket):
+    async def add_session(self, session_id, websocket: WebSocket):
         self.sessions[session_id] = (websocket, asyncio.create_task(self.__listen_to_websocket(session_id, websocket)))
         await self.broadcast_globally(
             {'type': 'event', 'data': {'type': 'join', 'content': f'{session_id} joined chat!'}}
         )
+        await websocket.send_json({'type': 'members', 'members': [session_id for session_id in self.sessions.keys()]})
 
     async def remove_session(self, session_id):
         self.sessions[session_id][1].cancel()
@@ -43,7 +44,7 @@ class Chat:
                     await self.broadcast_globally(
                         {'type': 'message', 'data': {'sender': session_id, 'content': content}}
                     )
-        except WebSocketDisconnect as e:
+        except WebSocketDisconnect:
             await self.remove_session(session_id)
 
 
@@ -56,7 +57,7 @@ async def get_chat(chat_id):
     if chat:
         return chat
 
-    messages_router = get_message_router(chat_id)
+    messages_router = get_messages_router(chat_id)
     chat = Chat(chat_id, messages_router)
     chats[chat.id] = chat
     await messages_router.subscribe(chat)
