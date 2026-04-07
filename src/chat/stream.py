@@ -1,5 +1,6 @@
 import json
 from abc import ABC, abstractmethod
+from redis.asyncio.client import PubSub
 
 
 class ChatStream(ABC):
@@ -42,22 +43,22 @@ from redis.asyncio import Redis
 
 
 class RedisChatStream(ChatStream):
-    def __init__(self, client: Redis, *args, **kwargs):
+    def __init__(self, client: Redis, pubsub: PubSub,  *args, **kwargs):
         self.__client = client
+        self.__pubsub = pubsub
         super().__init__(*args, **kwargs)
 
     async def listen(self):
-        pubsub = self.__client.pubsub()
-        await pubsub.subscribe(f'chat:{self.chat_id}:stream')
+        await self.__pubsub.subscribe(f'chat:{self.chat_id}:stream')
 
         # TODO remove duplicated code
         try:
-            async for data in pubsub.listen():
+            async for data in self.__pubsub.listen():
                 if data['type'] == 'subscribe':
                     continue
                 yield json.loads(data['data'])
         except BaseException as e:
-            await pubsub.aclose()
+            await self.__pubsub.aclose()
             raise e
 
     async def notify_join(self):
@@ -90,6 +91,8 @@ class RedisChatStream(ChatStream):
 
 
 class RedisChatStreamProducer(ChatStreamProducer):
+    __chats = {}
+
     def __init__(self, client: Redis):
         self.client = client
 
