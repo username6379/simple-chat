@@ -1,8 +1,7 @@
-from src.base.exceptions import ClientDisconnect
-from src.session.stream import SessionLifeStream
+from src.session.dispatcher import get_sessions_deaths_dispatcher
 
 
-async def handle_input_from_session_life_stream(stream: SessionLifeStream):
-    async for data in stream.listen(): # .listen() is a async generator. Don't take in consideration the warning
-        if data['type'] == 'dead':
-            raise ClientDisconnect
+async def wait_session_death(session_id):
+    dispatcher = await get_sessions_deaths_dispatcher(session_id)
+    event = await dispatcher.subscribe(session_id)
+    await event.wait()

@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from redis.asyncio import Redis
-from src.session.stream import SessionLifeStream
+from src.base.redis import client
 
 
 class SessionStorage(ABC):
@@ -33,10 +33,6 @@ class SessionStorage(ABC):
     async def remove_chat_reference(self, session_id: int):
         pass
 
-    @abstractmethod
-    async def get_session_life_stream(self) -> SessionLifeStream:
-        pass
-
 
 class RedisSessionStorage:
     def __init__(self, client: Redis):
@@ -62,3 +58,7 @@ class RedisSessionStorage:
 
     async def remove_chat_reference(self, session_id: int):
         await self.__client.delete(f'session:{session_id}:chat_reference')
+
+
+def get_session_storage():
+    return RedisSessionStorage(client=client)

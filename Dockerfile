@@ -1,12 +1,14 @@
-FROM python:3.14.3-trixie
+FROM python:3.14.3-alpine
 
-# Copy application files to container
 COPY . /app
 
 WORKDIR /app
 
+# Install gcc (needed to compile asyncmy)
+RUN apk update && apk add build-base
+
 # Install poetry
-RUN apt update && apt install -y pipx && pipx install poetry
+RUN apk add pipx && pipx install poetry
 ENV PATH="$PATH:/root/.local/bin"
 
 # Install application dependencies
